@@ -3,7 +3,7 @@ import {
     GatewayIntentBits,
     Partials
 } from "discord.js";
-import { commandHandler } from "./structure/commandFunctions";
+import { commandHandler, setCommands } from "./structure/commandFunctions";
 
 const client = new Client({
     intents: [
@@ -18,7 +18,9 @@ const client = new Client({
 
 client.on('interactionCreate', commandHandler)
 client.on('ready', async () => { 
-    /* 이곳에 getCommandOptions를 이용한 커맨드 등록을 할 수 있습니다. */
+    const guild = client.guilds.cache.get("Guild ID")
+    if (guild) console.log(setCommands(client, guild) ? "Commands updated" : "Commands not changed")
 })
 
 export { client };
+

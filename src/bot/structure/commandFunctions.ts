@@ -1,5 +1,5 @@
-import { ApplicationCommandData, ApplicationCommandOptionType, BaseInteraction } from "discord.js"
-import { readdirSync } from "fs"
+import { ApplicationCommandData, ApplicationCommandOptionType, BaseInteraction, Client, Guild } from "discord.js"
+import { readdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { ParameterList, ParameterType } from "./BaseCommand"
 import { SlashCommand } from "./SlashCommand"
@@ -18,7 +18,7 @@ export function convertParameterTypeToRaw(type: ParameterType) {
     }
 }
 
-export function getCommands() {
+function getCommands() {
     const cmdList: SlashCommand<ParameterList>[] = []
     function readDirectioryRecursive(p: string) {
         readdirSync(p).forEach(filePath => {
@@ -40,9 +40,25 @@ export async function commandHandler(interaction: BaseInteraction) {
     if (cmd) await cmd.run(interaction)
 }
 
-export function getCommandOptions() {
+function getCommandOptions() {
     const cmdOptionList: ApplicationCommandData[] = Commands.map(cmd => cmd.getOption())
+    const jsonSource = cmdOptionList.map(opt => Object.assign(opt, { defaultMemberPermissions: `${opt.defaultMemberPermissions}` }))
+    if (JSON.stringify(jsonSource) === readFileSync(join(__dirname, "commands.json")).toString()) return null;
+    writeFileSync(join(__dirname, "commands.json"), JSON.stringify(cmdOptionList))
     return cmdOptionList;
+}
+
+export function setCommands(client: Client, target: Client | Guild | Guild[], clear?: true) {
+    const options = getCommandOptions()
+    if (!options) return false;
+    if (target instanceof Client) {
+        client.application?.commands.set([])
+        if (!clear) client.application?.commands.set(options)
+        return true
+    }
+    if (!(target instanceof Array)) target = [target]
+    target.map(guild => { guild.commands.set([]); !clear && guild.commands.set(options) })
+    return true
 }
 
 const Commands = getCommands()
