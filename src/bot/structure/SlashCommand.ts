@@ -1,93 +1,54 @@
-import { 
-    ApplicationCommandData,
-    ApplicationCommandOptionData,
+import {
     ApplicationCommandType,
-    BaseInteraction,
+    ChatInputApplicationCommandData,
     ChatInputCommandInteraction,
+    PermissionFlagsBits
 } from "discord.js";
-import { readdirSync } from "fs";
-import path from "path";
-import { ActionFunction, CommandAvailable, SlashSubCommand } from "./SlashSubCommand";
+import { BaseCommand, BaseCommandOptions, ParameterList } from "./BaseCommand";
+import { convertParameterTypeToRaw } from "./commandFunctions";
+import { SlashSubCommand } from "./SlashSubCommand";
 import { SlashSubCommandGroup } from "./SlashSubCommandGroup";
 
-interface CommandOptions {
-    readonly name: string;
-    readonly description: string;
-    readonly args?: ApplicationCommandOptionData[];
-    readonly subCommands?: Array<SlashSubCommandGroup | SlashSubCommand>;
-    readonly permission: bigint;
-    readonly commandAvailable: CommandAvailable;
-    readonly action?: ActionFunction;
+interface SlashCommandOptions<P extends ParameterList> extends BaseCommandOptions<P> {
+    readonly subCommands?: (SlashSubCommand<ParameterList> | SlashSubCommandGroup)[]
+    readonly dmAvailable?: boolean
+    readonly defaultMemberPermission?: typeof PermissionFlagsBits[keyof typeof PermissionFlagsBits];
 }
 
-export class SlashCommand {
+export class SlashCommand<P extends ParameterList> extends BaseCommand<P, SlashCommandOptions<P>> {
 
-    protected readonly options: CommandOptions;
-    protected readonly action: ActionFunction;
-    
-    constructor(options: CommandOptions) {
-        this.options = options;  
-        this.action = options.action ?? (async () => {});
+    constructor(options: SlashCommandOptions<P>) {
+        super(options)
     }
 
-    async run(interaction: ChatInputCommandInteraction) {
-        if (!this.options.subCommands) return await this.action(interaction)
-        for (const subCommand of this.options.subCommands) {
-            if (!subCommand.isMyCommand(interaction)) continue;
-            if (subCommand instanceof SlashSubCommand) return await subCommand.action(interaction)
-            if (subCommand instanceof SlashSubCommandGroup) {
-                for (const subCommandGroupCommand of subCommand.subCommands) {
-                    if (!subCommandGroupCommand.isMyCommand(interaction)) continue;
-                    return await subCommandGroupCommand.action(interaction)
-                }
-            }
-        }
-    }
-
-    isMyCommand(interaction: ChatInputCommandInteraction) {
+    is(interaction: ChatInputCommandInteraction): boolean {
         return interaction.commandName === this.options.name;
     }
 
     getOption() {
-        const cmdOption: ApplicationCommandData = {
+        const cmdOption: ChatInputApplicationCommandData = {
             name: this.options.name,
             description: this.options.description,
             type: ApplicationCommandType.ChatInput,
-            options: (this.options.subCommands?.map(c => c.getOption()) ?? this.options.args) ?? [],
-            dmPermission: this.options.commandAvailable === CommandAvailable.ONLY_DM,
-            defaultMemberPermissions: this.options.permission
+            options: this.options.args?.map(arg => Object.assign(arg, { type: convertParameterTypeToRaw(arg.type) })) ?? [],
+            dmPermission: !!this.options.dmAvailable,
+            defaultMemberPermissions: this.options.defaultMemberPermission ?? PermissionFlagsBits.SendMessages,
         }
         return cmdOption;
     }
-}
 
-export function getCommands() {
-    const cmdList: SlashCommand[] = []
-    function readDirectioryRecursive(p: string) {
-        readdirSync(p).forEach(filePath => {
-            const newPath = p + '/' + filePath
-            if (filePath.endsWith('.ts')) {
-                const cmd = require(newPath).default
-                if (cmd instanceof SlashCommand) cmdList.push(cmd)
-                return;
-            } readDirectioryRecursive(newPath)
-        })
+    async run(interaction: ChatInputCommandInteraction) {
+        if (!this.options.subCommands) return await this.action(interaction, this.parameterHandler(interaction))
+        for (const subCommand of this.options.subCommands) {
+            if (!subCommand.is(interaction)) continue;
+            if (subCommand instanceof SlashSubCommand) return await subCommand.action(interaction, subCommand.parameterHandler(interaction))
+            if (subCommand instanceof SlashSubCommandGroup) {
+                for (const subCommandGroupCommand of subCommand.subCommands) {
+                    if (!subCommandGroupCommand.is(interaction)) continue;
+                    return await subCommandGroupCommand.action(interaction, subCommandGroupCommand.parameterHandler(interaction))
+                }
+            }
+        }
     }
-    readDirectioryRecursive(path.join(__dirname, '../command'))
-    return cmdList;
 }
 
-export async function commandHandler(interaction: BaseInteraction) {
-    if (!interaction.isChatInputCommand()) return;
-    const cmd = commands.find(c => c.isMyCommand(interaction))
-    if (cmd) await cmd.run(interaction)
-}
-
-export function getCommandOptions() {
-    const cmdOptionList: ApplicationCommandData[] = commands.map(cmd => cmd.getOption())
-    return cmdOptionList;
-}
-
-const commands = getCommands()
-
-export { commands }

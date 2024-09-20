@@ -1,46 +1,31 @@
-import { 
-    ApplicationCommandOptionData,
+import {
     ApplicationCommandOptionType,
     ApplicationCommandSubCommandData,
-    ApplicationCommandSubGroupData,
-    ChatInputCommandInteraction,
+    ChatInputCommandInteraction
 } from "discord.js";
+import { BaseCommand, BaseCommandOptions, ParameterList } from "./BaseCommand";
+import { convertParameterTypeToRaw } from "./commandFunctions";
 
-export enum CommandAvailable {
-    ONLY_DM,
-    ONLY_GUILD,
+interface SlashSubCommandOptions<P extends ParameterList> extends BaseCommandOptions<P> {
+
 }
 
-export type ActionFunction = (interaction: ChatInputCommandInteraction) => Promise<void>;
+export class SlashSubCommand<P extends ParameterList> extends BaseCommand<P, SlashSubCommandOptions<P>> {
 
-interface CommandOptions {
-    readonly name: string;
-    readonly description: string;
-    readonly args?: Exclude<ApplicationCommandOptionData, ApplicationCommandSubCommandData | ApplicationCommandSubGroupData>[];
-    readonly required: boolean;
-    readonly action: ActionFunction;
-}
-
-export class SlashSubCommand {
-
-    protected readonly options: CommandOptions;
-    readonly action: ActionFunction;
-    
-    constructor(options: CommandOptions) {
-        this.options = options;  
-        this.action = options.action ?? (async () => {});
+    constructor(options: SlashSubCommandOptions<P>) {
+        super(options)
     }
 
-    isMyCommand(interaction: ChatInputCommandInteraction) {
-        return interaction.options.getSubcommand() === this.options.name;
+    is(interaction: ChatInputCommandInteraction) {
+        return interaction.options.getSubcommand() === this.name
     }
 
     getOption() {
-        const cmdOption: ApplicationCommandOptionData = {
+        const cmdOption: ApplicationCommandSubCommandData = {
             name: this.options.name,
             description: this.options.description,
             type: ApplicationCommandOptionType.Subcommand,
-            options: this.options.args ?? [],
+            options: this.options.args?.map(arg => Object.assign(arg, { type: convertParameterTypeToRaw(arg.type) })) ?? [],
         }
         return cmdOption;
     }

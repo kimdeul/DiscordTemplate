@@ -1,27 +1,28 @@
-import { 
+import {
     ApplicationCommandOptionData,
     ApplicationCommandOptionType,
     ChatInputCommandInteraction,
 } from "discord.js";
+import { BaseCommand, BaseCommandOptions, ParameterList } from "./BaseCommand";
 import { SlashSubCommand } from "./SlashSubCommand";
 
-interface CommandOptions {
+interface SlashSubCommandGroupOptions extends BaseCommandOptions<[]> {
     readonly name: string;
     readonly description: string;
-    readonly subCommands: SlashSubCommand[];
+    readonly subCommands: SlashSubCommand<ParameterList>[]
+    readonly args: never;
+    readonly action: never;
 }
 
-export class SlashSubCommandGroup {
-
-    readonly options: CommandOptions;
+export class SlashSubCommandGroup extends BaseCommand<[], SlashSubCommandGroupOptions> {
     
-    constructor(options: CommandOptions) {
-        this.options = options;       
+    constructor(options: SlashSubCommandGroupOptions) {
+        super(options)       
     }
 
     get subCommands() { return this.options.subCommands }
 
-    isMyCommand(interaction: ChatInputCommandInteraction) {
+    is(interaction: ChatInputCommandInteraction) {
         return interaction.options.getSubcommandGroup() === this.options.name;
     }
 
